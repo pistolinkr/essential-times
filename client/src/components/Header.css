@@ -1,0 +1,95 @@
+.header {
+  background: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.header-top {
+  border-bottom: 1px solid #e9ecef;
+  padding: 10px 0;
+}
+
+.header-top-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo h1 {
+  color: #03c75a;
+  font-size: 24px;
+  font-weight: bold;
+  margin: 0;
+}
+
+.logo {
+  text-decoration: none;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.user-name {
+  color: #666;
+  font-size: 14px;
+}
+
+.header-nav {
+  padding: 0;
+}
+
+.nav-menu {
+  display: flex;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-menu li {
+  position: relative;
+}
+
+.nav-menu li a {
+  display: block;
+  padding: 15px 20px;
+  color: #333;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+.nav-menu li a:hover {
+  color: #03c75a;
+}
+
+.nav-menu li a.active {
+  color: #03c75a;
+  border-bottom: 2px solid #03c75a;
+}
+
+@media (max-width: 768px) {
+  .header-top-content {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .nav-menu {
+    flex-wrap: wrap;
+  }
+  
+  .nav-menu li a {
+    padding: 10px 15px;
+    font-size: 14px;
+  }
+} 
