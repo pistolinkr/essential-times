@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const sqlite3 = require('sqlite3').verbose();
+const { createClient } = require('@supabase/supabase-js');
 const { v4: uuidv4 } = require('uuid');
 
 // Load environment variables
@@ -20,81 +20,46 @@ app.use(express.json());
 app.use(express.static('uploads'));
 app.use(express.static(path.join(__dirname, 'client/build')));
 
-// Database setup
-const db = new sqlite3.Database('./essential_times.db');
+// Supabase setup
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Create tables
-db.serialize(() => {
-  // Users table
-  db.run(`CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    role TEXT NOT NULL,
-    name TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+// Initialize default categories in Supabase
+async function initializeCategories() {
+  try {
+    const { data: existingCategories } = await supabase
+      .from('categories')
+      .select('*');
 
-  // Categories table
-  db.run(`CREATE TABLE IF NOT EXISTS categories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE NOT NULL,
-    slug TEXT UNIQUE NOT NULL,
-    display_order INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )`);
+    if (!existingCategories || existingCategories.length === 0) {
+      const defaultCategories = [
+        { name: '홈', slug: 'home', display_order: 0 },
+        { name: '정치', slug: 'politics', display_order: 1 },
+        { name: '경제', slug: 'economy', display_order: 2 },
+        { name: '사회', slug: 'society', display_order: 3 },
+        { name: '기술', slug: 'technology', display_order: 4 },
+        { name: '연예', slug: 'entertainment', display_order: 5 },
+        { name: '스포츠', slug: 'sports', display_order: 6 }
+      ];
 
-  // Articles table
-  db.run(`CREATE TABLE IF NOT EXISTS articles (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    content TEXT NOT NULL,
-    author_id INTEGER NOT NULL,
-    author_name TEXT NOT NULL,
-    category_id INTEGER,
-    image_url TEXT,
-    status TEXT DEFAULT 'published',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (author_id) REFERENCES users (id),
-    FOREIGN KEY (category_id) REFERENCES categories (id)
-  )`);
+      const { error } = await supabase
+        .from('categories')
+        .insert(defaultCategories);
 
-  // Insert default users from environment variables
-  const defaultUsers = [
-    { 
-      email: process.env.REPORTER_ACCOUNT_ID || 'reporter@esil.com', 
-      password: process.env.REPORTER_ACCOUNT_PASSWORD || 'abcd1234', 
-      role: 'reporter', 
-      name: '기자' 
-    },
-    { 
-      email: process.env.ADMIN_ACCOUNT_ID || 'admin@esil.com', 
-      password: process.env.ADMIN_ACCOUNT_PASSWORD || 'abcd1234', 
-      role: 'admin', 
-      name: '관리자' 
-    }
-  ];
-
-  defaultUsers.forEach(user => {
-    bcrypt.hash(user.password, 10, (err, hash) => {
-      if (err) {
-        console.error('Error hashing password:', err);
-        return;
+      if (error) {
+        console.error('Error inserting default categories:', error);
+      } else {
+        console.log('Default categories initialized');
       }
-      
-      db.run(
-        'INSERT OR IGNORE INTO users (email, password, role, name) VALUES (?, ?, ?, ?)',
-        [user.email, hash, user.role, user.name],
-        (err) => {
-          if (err) {
-            console.error('Error inserting user:', err);
-          }
-        }
-      );
-    });
-  });
-});
+    }
+  } catch (error) {
+    console.error('Error initializing categories:', error);
+  }
+}
+
+// Initialize categories on startup
+initializeCategories();
 
 // File upload configuration
 const storage = multer.diskStorage({
@@ -143,76 +108,74 @@ const authenticateToken = (req, res, next) => {
 
 // Routes
 
-// Login
-app.post('/api/login', (req, res) => {
+// Login with Supabase Auth
+app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
 
-  db.get('SELECT * FROM users WHERE email = ?', [email], (err, user) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
+  try {
+    // Authenticate with Supabase
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
 
-    if (!user) {
+    if (authError) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    bcrypt.compare(password, user.password, (err, isMatch) => {
-      if (err || !isMatch) {
-        return res.status(401).json({ error: 'Invalid credentials' });
-      }
+    // Get user profile from our users table
+    const { data: userProfile, error: profileError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', authData.user.id)
+      .single();
 
-      const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role, name: user.name },
-        process.env.JWT_SECRET_KEY || 'your-secret-key',
-        { expiresIn: '24h' }
-      );
+    if (profileError || !userProfile) {
+      return res.status(401).json({ error: 'User profile not found' });
+    }
 
-      res.json({
-        token,
-        user: {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-          name: user.name
-              }
-    });
-  });
-
-  // Insert default categories
-  const defaultCategories = [
-    { name: '정치', slug: 'politics', display_order: 1 },
-    { name: '경제', slug: 'economy', display_order: 2 },
-    { name: '사회', slug: 'society', display_order: 3 },
-    { name: '기술', slug: 'technology', display_order: 4 },
-    { name: '연예', slug: 'entertainment', display_order: 5 },
-    { name: '스포츠', slug: 'sports', display_order: 6 }
-  ];
-
-  defaultCategories.forEach(category => {
-    db.run(
-      'INSERT OR IGNORE INTO categories (name, slug, display_order) VALUES (?, ?, ?)',
-      [category.name, category.slug, category.display_order],
-      (err) => {
-        if (err) {
-          console.error('Error inserting category:', err);
-        }
-      }
+    // Create JWT token
+    const token = jwt.sign(
+      { 
+        id: userProfile.id, 
+        email: userProfile.email, 
+        role: userProfile.role 
+      },
+      process.env.JWT_SECRET_KEY || 'your-secret-key',
+      { expiresIn: '24h' }
     );
-  });
-});
+
+    res.json({
+      token,
+      user: {
+        id: userProfile.id,
+        email: userProfile.email,
+        role: userProfile.role
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Login failed' });
+  }
 });
 
 // Get all categories (public)
-app.get('/api/categories', (req, res) => {
-  db.all(
-    'SELECT * FROM categories ORDER BY display_order ASC',
-    (err, categories) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-      res.json(categories);
+app.get('/api/categories', async (req, res) => {
+  try {
+    const { data: categories, error } = await supabase
+      .from('categories')
+      .select('*')
+      .order('display_order', { ascending: true });
+
+    if (error) {
+      return res.status(500).json({ error: 'Database error' });
     }
-  );
+
+    res.json(categories);
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Get articles by category (public)
