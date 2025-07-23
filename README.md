@@ -1,3 +1,173 @@
+# Essential Times - News Posting Site
+
+Essential Times is a news posting site where reporters and administrators can write and manage articles. It provides a clean design similar to Naver News with a user-friendly interface.
+
+## Key Features
+
+### 🔐 User Authentication
+- **Reporter Account**: Configured via environment variables (default: `reporter@esil.com` | `abcd1234`)
+- **Admin Account**: Configured via environment variables (default: `admin@esil.com` | `abcd1234`)
+
+### 👨‍💼 Reporter Features
+- Article writing (title, content, image attachment)
+- Edit/delete only their own articles
+- View article list
+
+### 👨‍💻 Admin Features
+- Manage all articles (edit/delete)
+- Create new articles
+- View complete article list
+
+### 📰 General User Features
+- Main page with Naver News style
+- Browse and view article details
+- Responsive design
+
+## Tech Stack
+
+### Backend
+- **Node.js** + **Express.js**
+- **SQLite** database
+- **JWT** authentication
+- **Multer** file upload
+- **bcryptjs** password encryption
+
+### Frontend
+- **React.js** + **React Router**
+- **Axios** API communication
+- **CSS3** styling
+- Responsive web design
+
+## Installation & Setup
+
+### 1. Environment Variables
+
+```bash
+# Create .env file
+cp env.example .env
+
+# Edit .env file with actual account information
+# REPORTER_ACCOUNT_ID=your-reporter-email
+# REPORTER_ACCOUNT_PASSWORD=your-reporter-password
+# ADMIN_ACCOUNT_ID=your-admin-email
+# ADMIN_ACCOUNT_PASSWORD=your-admin-password
+# JWT_SECRET_KEY=your-secret-key
+```
+
+### 2. Install Dependencies
+
+```bash
+# Install backend dependencies
+npm install
+
+# Install frontend dependencies
+cd client
+npm install
+cd ..
+```
+
+### 3. Start Server
+
+```bash
+# Run server in development mode
+npm run dev
+
+# Or in production mode
+npm start
+```
+
+### 4. Start Client (separate terminal)
+
+```bash
+cd client
+npm start
+```
+
+### 5. Access in Browser
+
+- **Main Site**: http://localhost:3000
+- **API Server**: http://localhost:5001
+
+## Project Structure
+
+```
+Essential Times/
+├── server.js              # Express server main file
+├── package.json           # Backend dependencies
+├── essential_times.db     # SQLite database
+├── uploads/              # Uploaded images storage
+└── client/               # React frontend
+    ├── public/
+    ├── src/
+    │   ├── components/   # Reusable components
+    │   ├── pages/        # Page components
+    │   ├── utils/        # Utility functions
+    │   ├── App.js        # Main app component
+    │   └── index.js      # React entry point
+    └── package.json      # Frontend dependencies
+```
+
+## API Endpoints
+
+### Authentication
+- `POST /api/login` - User login
+
+### Article Management
+- `GET /api/articles` - Get public article list
+- `GET /api/articles/:id` - Get article details
+- `POST /api/articles` - Create article (authentication required)
+- `PUT /api/articles/:id` - Edit article (author/admin only)
+- `DELETE /api/articles/:id` - Delete article (author/admin only)
+- `GET /api/my-articles` - Get my articles (authentication required)
+- `GET /api/admin/articles` - Get all articles (admin only)
+
+## Key Features
+
+### 🔒 Security
+- JWT token-based authentication
+- bcrypt password encryption
+- Role-based access control
+- Secure account information management via environment variables
+- Separation of sensitive information via .env file
+
+### 📱 Responsive Design
+- Mobile, tablet, desktop support
+- Clean UI similar to Naver News
+
+### 🖼️ Image Upload
+- Image file upload support
+- Automatic filename generation and storage
+
+### 📊 Database
+- Lightweight database using SQLite
+- Automatic table creation and default user registration
+
+## Usage
+
+### 1. Login as Reporter
+- Login with reporter account configured in environment variables
+- Click "Reporter Page" button
+- Create new articles or edit/delete existing ones
+
+### 2. Login as Admin
+- Login with admin account configured in environment variables
+- Click "Admin Page" button
+- Manage all articles and create new ones
+
+### 3. General Users
+- Browse articles on main page without login
+- Click article title to view details
+
+## License
+
+MIT License
+
+## Developer
+
+Essential Times Development Team
+
+---
+
 # Essential Times - 뉴스포스트 사이트
 
 Essential Times는 기자와 관리자가 기사를 작성하고 관리할 수 있는 뉴스포스트 사이트입니다. 네이버 뉴스 스타일의 깔끔한 디자인과 사용자 친화적인 인터페이스를 제공합니다.
@@ -66,7 +236,7 @@ npm install
 cd ..
 ```
 
-### 2. 서버 실행
+### 3. 서버 실행
 
 ```bash
 # 개발 모드로 서버 실행
@@ -76,14 +246,14 @@ npm run dev
 npm start
 ```
 
-### 3. 클라이언트 실행 (별도 터미널)
+### 4. 클라이언트 실행 (별도 터미널)
 
 ```bash
 cd client
 npm start
 ```
 
-### 4. 브라우저에서 접속
+### 5. 브라우저에서 접속
 
 - **메인 사이트**: http://localhost:3000
 - **API 서버**: http://localhost:5001
