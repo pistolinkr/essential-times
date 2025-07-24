@@ -6,10 +6,7 @@
   text-align: center;
   margin-bottom: 40px;
   padding: 40px 0;
-  background: linear-gradient(135deg, #03c75a 0%, #02a94a 100%);
-  color: white;
-  border-radius: 12px;
-  margin-bottom: 40px;
+  color: var(--text-primary);
 }
 
 .home-header h1 {
@@ -48,10 +45,6 @@
   text-align: center;
   padding: 60px 20px;
   color: var(--text-secondary);
-  background: var(--bg-card);
-  border-radius: 8px;
-  box-shadow: var(--shadow);
-  border: 1px solid var(--border-color);
 }
 
 .no-articles p {

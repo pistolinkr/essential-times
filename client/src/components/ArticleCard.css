@@ -1,21 +1,18 @@
 .article-card {
-  background: var(--bg-card);
-  border-radius: 8px;
-  box-shadow: var(--shadow);
   margin-bottom: 20px;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   overflow: hidden;
-  border: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 20px;
 }
 
 .article-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-hover);
+  transform: translateY(-1px);
 }
 
 .article-content {
   display: flex;
-  padding: 20px;
+  padding: 0;
   gap: 20px;
 }
 

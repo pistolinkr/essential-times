@@ -6,9 +6,7 @@
   text-align: center;
   margin-bottom: 40px;
   padding: 30px;
-  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
-  color: white;
-  border-radius: 12px;
+  color: #333;
 }
 
 .admin-header h1 {
@@ -59,14 +57,12 @@
 }
 
 .article-item {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   padding: 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 20px;
+  border-bottom: 1px solid #eee;
 }
 
 .article-info {
@@ -114,9 +110,6 @@
   text-align: center;
   padding: 60px 20px;
   color: #666;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .no-articles p {

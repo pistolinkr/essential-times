@@ -39,13 +39,13 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 40px;
+  padding: 30px;
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
   width: 100%;
   max-width: 400px;
 }
@@ -53,7 +53,7 @@
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .form-group label {
@@ -84,7 +84,7 @@
   padding: 15px;
   font-size: 16px;
   font-weight: 600;
-  margin-top: 10px;
+  margin-top: 5px;
   width: 100%;
   border-radius: 8px;
   transition: all 0.3s ease;
