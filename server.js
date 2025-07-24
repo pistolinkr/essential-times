@@ -139,6 +139,46 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// Register new user
+app.post('/api/register', async (req, res) => {
+  const { name, email, password, role } = req.body;
+
+  try {
+    // Check if user already exists
+    const existingUser = users.find(u => u.email === email);
+    if (existingUser) {
+      return res.status(400).json({ error: 'User already exists with this email' });
+    }
+
+    // Create new user
+    const newUser = {
+      id: uuidv4(),
+      name,
+      email,
+      password,
+      role: role || 'user'
+    };
+
+    // Add to users array
+    users.push(newUser);
+
+    console.log('✅ New user registered:', newUser.email);
+
+    res.status(201).json({ 
+      message: 'User registered successfully',
+      user: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role
+      }
+    });
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
 // Get all categories (public)
 app.get('/api/categories', async (req, res) => {
   try {
