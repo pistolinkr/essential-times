@@ -74,12 +74,16 @@ const Header = ({ user, onLogout }) => {
       <nav className="header-nav">
         <div className="container">
           <ul className="nav-menu">
-            <li><Link to="/" className={location.pathname === '/' ? 'active' : ''}>홈</Link></li>
             {categories.map((category) => (
               <li key={category.id}>
                 <Link 
-                  to={`/category/${category.slug}`}
-                  className={location.pathname === `/category/${category.slug}` ? 'active' : ''}
+                  to={category.slug === 'home' ? '/' : `/category/${category.slug}`}
+                  className={
+                    (category.slug === 'home' && location.pathname === '/') ||
+                    (category.slug !== 'home' && location.pathname === `/category/${category.slug}`)
+                      ? 'active' 
+                      : ''
+                  }
                 >
                   {category.name}
                 </Link>

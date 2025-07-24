@@ -5,6 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+
 // Simple user authentication (no Firebase Auth)
 const users = [
   {
@@ -23,7 +24,7 @@ const users = [
   }
 ];
 
-// Simple in-memory storage (replace with database later)
+// Simple in-memory storage
 let articles = [];
 let categories = [
   { id: 'home', name: '홈', slug: 'home', display_order: 0 },
@@ -35,8 +36,6 @@ let categories = [
   { id: 'sports', name: '스포츠', slug: 'sports', display_order: 6 }
 ];
 
-// Environment variables are loaded in firebase-config.js
-
 const app = express();
 const PORT = process.env.PORT || 5001;
 
@@ -46,7 +45,7 @@ app.use(express.json());
 app.use(express.static('uploads'));
 app.use(express.static(path.join(__dirname, 'client/build')));
 
-// Health check endpoint for Firebase App Hosting
+// Health check endpoint
 app.get('/api/health', (req, res) => {
   res.status(200).json({ 
     status: 'healthy', 
@@ -55,7 +54,6 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Categories are already initialized in memory
 console.log('✅ Categories initialized:', categories.length);
 
 // File upload configuration
@@ -102,8 +100,6 @@ const authenticateToken = (req, res, next) => {
     next();
   });
 };
-
-// Routes
 
 // Simple login without Firebase Auth
 app.post('/api/login', async (req, res) => {
@@ -161,76 +157,57 @@ app.get('/api/categories/:slug/articles', async (req, res) => {
 
   try {
     // Get category first
-    const categoriesRef = collection(db, 'categories');
-    const categoryQuery = query(categoriesRef, where('slug', '==', slug));
-    const categorySnapshot = await getDocs(categoryQuery);
+    const category = categories.find(c => c.slug === slug);
 
-    if (categorySnapshot.empty) {
+    if (!category) {
       return res.status(404).json({ error: 'Category not found' });
     }
 
-    const category = categorySnapshot.docs[0].data();
-
-    // Get articles for this category
-    const articlesRef = collection(db, 'articles');
-    const articlesQuery = query(
-      articlesRef,
-      where('category_id', '==', categorySnapshot.docs[0].id),
-      where('status', '==', 'published'),
-      orderBy('created_at', 'desc'),
-      limit(limit),
-      startAfter((page - 1) * limit)
+    // Get articles for this category (filter from memory)
+    const categoryArticles = articles.filter(article => 
+      article.category_id === category.id && article.status === 'published'
     );
 
-    const articlesSnapshot = await getDocs(articlesQuery);
-    const articles = [];
-
-    for (const doc of articlesSnapshot.docs) {
-      const articleData = doc.data();
-      
-      // Get author info
-      const usersRef = collection(db, 'users');
-      const userQuery = query(usersRef, where('id', '==', articleData.author_id));
-      const userSnapshot = await getDocs(userQuery);
-      const authorName = userSnapshot.empty ? 'Unknown' : userSnapshot.docs[0].data().name;
-
-      articles.push({
-        id: doc.id,
-        ...articleData,
-        author_name: authorName,
-        category_name: category.name
-      });
-    }
-
-    // Get total count
-    const countQuery = query(
-      articlesRef,
-      where('category_id', '==', categorySnapshot.docs[0].id),
-      where('status', '==', 'published')
-    );
-    const countSnapshot = await getDocs(countQuery);
-    const total = countSnapshot.size;
+    // Apply pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedArticles = categoryArticles.slice(startIndex, endIndex);
 
     res.json({
-      articles,
-      pagination: {
-        current: page,
-        total: Math.ceil(total / limit),
-        hasNext: page * limit < total,
-        hasPrev: page > 1
-      }
+      articles: paginatedArticles,
+      total: categoryArticles.length,
+      page,
+      limit,
+      totalPages: Math.ceil(categoryArticles.length / limit)
     });
   } catch (error) {
-    console.error('Error fetching articles by category:', error);
-    res.status(500).json({ error: 'Database error' });
+    console.error('Error fetching category articles:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
 // Get all articles (public)
 app.get('/api/articles', async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+
   try {
     const publishedArticles = articles.filter(article => article.status === 'published');
-    res.json(publishedArticles);
+    
+    // Apply pagination
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedArticles = publishedArticles.slice(startIndex, endIndex);
+
+    res.json({
+      articles: paginatedArticles,
+      pagination: {
+        current: page,
+        total: Math.ceil(publishedArticles.length / limit),
+        hasNext: page * limit < publishedArticles.length,
+        hasPrev: page > 1
+      }
+    });
   } catch (error) {
     console.error('Error fetching articles:', error);
     res.status(500).json({ error: 'Server error' });
@@ -241,275 +218,186 @@ app.get('/api/articles', async (req, res) => {
 app.get('/api/articles/:id', (req, res) => {
   const { id } = req.params;
 
-  db.get(
-    `SELECT a.*, u.name as author_name 
-     FROM articles a 
-     JOIN users u ON a.author_id = u.id 
-     WHERE a.id = ? AND a.status = 'published'`,
-    [id],
-    (err, article) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      if (!article) {
-        return res.status(404).json({ error: 'Article not found' });
-      }
-
-      res.json(article);
+  try {
+    const article = articles.find(a => a.id === id && a.status === 'published');
+    
+    if (!article) {
+      return res.status(404).json({ error: 'Article not found' });
     }
-  );
-});
 
-// Create article (authenticated)
-app.post('/api/articles', authenticateToken, upload.single('image'), (req, res) => {
-  const { title, content, category_id } = req.body;
-  const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    // Get author name
+    const author = users.find(u => u.id === article.author_id);
+    const articleWithAuthor = {
+      ...article,
+      author_name: author ? author.name : 'Unknown'
+    };
 
-  if (!title || !content) {
-    return res.status(400).json({ error: 'Title and content are required' });
+    res.json(articleWithAuthor);
+  } catch (error) {
+    console.error('Error fetching article:', error);
+    res.status(500).json({ error: 'Server error' });
   }
-
-  db.run(
-    'INSERT INTO articles (title, content, author_id, author_name, category_id, image_url) VALUES (?, ?, ?, ?, ?, ?)',
-    [title, content, req.user.id, req.user.name, category_id || null, imageUrl],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      res.status(201).json({
-        id: this.lastID,
-        title,
-        content,
-        author_id: req.user.id,
-        author_name: req.user.name,
-        category_id: category_id || null,
-        image_url: imageUrl,
-        status: 'published',
-        created_at: new Date().toISOString()
-      });
-    }
-  );
 });
 
-// Update article (author or admin only)
-app.put('/api/articles/:id', authenticateToken, upload.single('image'), (req, res) => {
-  const { id } = req.params;
-  const { title, content, category_id } = req.body;
-  const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
-
-  // Check if user can edit this article
-  db.get('SELECT * FROM articles WHERE id = ?', [id], (err, article) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
+// Create article (protected - reporter/admin only)
+app.post('/api/articles', authenticateToken, upload.single('image'), async (req, res) => {
+  try {
+    const { title, content, category_id, summary } = req.body;
+    
+    if (!title || !content || !category_id) {
+      return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    if (!article) {
+    const newArticle = {
+      id: uuidv4(),
+      title,
+      content,
+      summary: summary || '',
+      category_id,
+      author_id: req.user.id,
+      status: 'published',
+      image_url: req.file ? `/uploads/${req.file.filename}` : null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    articles.push(newArticle);
+
+    res.status(201).json(newArticle);
+  } catch (error) {
+    console.error('Error creating article:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update article (protected - author or admin only)
+app.put('/api/articles/:id', authenticateToken, upload.single('image'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, content, category_id, summary, status } = req.body;
+
+    const articleIndex = articles.findIndex(a => a.id === id);
+    
+    if (articleIndex === -1) {
       return res.status(404).json({ error: 'Article not found' });
     }
 
+    const article = articles[articleIndex];
+
+    // Check permissions
     if (req.user.role !== 'admin' && article.author_id !== req.user.id) {
-      return res.status(403).json({ error: 'Not authorized to edit this article' });
+      return res.status(403).json({ error: 'Permission denied' });
     }
 
-    const updateFields = [];
-    const updateValues = [];
+    // Update article
+    articles[articleIndex] = {
+      ...article,
+      title: title || article.title,
+      content: content || article.content,
+      summary: summary || article.summary,
+      category_id: category_id || article.category_id,
+      status: status || article.status,
+      image_url: req.file ? `/uploads/${req.file.filename}` : article.image_url,
+      updated_at: new Date().toISOString()
+    };
 
-    if (title) {
-      updateFields.push('title = ?');
-      updateValues.push(title);
-    }
-
-    if (content) {
-      updateFields.push('content = ?');
-      updateValues.push(content);
-    }
-
-    if (category_id !== undefined) {
-      updateFields.push('category_id = ?');
-      updateValues.push(category_id || null);
-    }
-
-    if (imageUrl) {
-      updateFields.push('image_url = ?');
-      updateValues.push(imageUrl);
-    }
-
-    updateFields.push('updated_at = CURRENT_TIMESTAMP');
-    updateValues.push(id);
-
-    db.run(
-      `UPDATE articles SET ${updateFields.join(', ')} WHERE id = ?`,
-      updateValues,
-      function(err) {
-        if (err) {
-          return res.status(500).json({ error: 'Database error' });
-        }
-
-        res.json({ message: 'Article updated successfully' });
-      }
-    );
-  });
+    res.json(articles[articleIndex]);
+  } catch (error) {
+    console.error('Error updating article:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
-// Delete article (author or admin only)
-app.delete('/api/articles/:id', authenticateToken, (req, res) => {
-  const { id } = req.params;
+// Delete article (protected - author or admin only)
+app.delete('/api/articles/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
 
-  db.get('SELECT * FROM articles WHERE id = ?', [id], (err, article) => {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-
-    if (!article) {
+    const articleIndex = articles.findIndex(a => a.id === id);
+    
+    if (articleIndex === -1) {
       return res.status(404).json({ error: 'Article not found' });
     }
 
+    const article = articles[articleIndex];
+
+    // Check permissions
     if (req.user.role !== 'admin' && article.author_id !== req.user.id) {
-      return res.status(403).json({ error: 'Not authorized to delete this article' });
+      return res.status(403).json({ error: 'Permission denied' });
     }
 
-    db.run('DELETE FROM articles WHERE id = ?', [id], function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
+    // Remove article
+    articles.splice(articleIndex, 1);
 
-      res.json({ message: 'Article deleted successfully' });
+    res.json({ message: 'Article deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting article:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get user's articles (protected)
+app.get('/api/user/articles', authenticateToken, async (req, res) => {
+  try {
+    let userArticles;
+    
+    if (req.user.role === 'admin') {
+      // Admin can see all articles
+      userArticles = articles;
+    } else {
+      // Reporter can only see their own articles
+      userArticles = articles.filter(article => article.author_id === req.user.id);
+    }
+
+    res.json(userArticles);
+  } catch (error) {
+    console.error('Error fetching user articles:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get my articles (protected) - for compatibility
+app.get('/api/my-articles', authenticateToken, async (req, res) => {
+  try {
+    const userArticles = articles.filter(article => article.author_id === req.user.id);
+    res.json(userArticles);
+  } catch (error) {
+    console.error('Error fetching my articles:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get all articles for admin (protected, admin only)
+app.get('/api/admin/articles', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const adminArticles = articles.map(article => {
+      const author = users.find(u => u.id === article.author_id);
+      const category = categories.find(c => c.id === article.category_id);
+      
+      return {
+        ...article,
+        author_name: author ? author.name : 'Unknown',
+        category_name: category ? category.name : 'Unknown'
+      };
     });
-  });
-});
 
-// Get user's articles (authenticated)
-app.get('/api/my-articles', authenticateToken, (req, res) => {
-  db.all(
-    'SELECT * FROM articles WHERE author_id = ? ORDER BY created_at DESC',
-    [req.user.id],
-    (err, articles) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      res.json(articles);
-    }
-  );
-});
-
-// Get all articles for admin (authenticated, admin only)
-app.get('/api/admin/articles', authenticateToken, (req, res) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
+    res.json(adminArticles);
+  } catch (error) {
+    console.error('Error fetching admin articles:', error);
+    res.status(500).json({ error: 'Server error' });
   }
-
-  db.all(
-    `SELECT a.*, u.name as author_name, c.name as category_name 
-     FROM articles a 
-     JOIN users u ON a.author_id = u.id 
-     LEFT JOIN categories c ON a.category_id = c.id 
-     ORDER BY a.created_at DESC`,
-    (err, articles) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      res.json(articles);
-    }
-  );
 });
 
-// Category management (admin only)
-app.get('/api/admin/categories', authenticateToken, (req, res) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
-
-  db.all(
-    'SELECT * FROM categories ORDER BY display_order ASC',
-    (err, categories) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-      res.json(categories);
-    }
-  );
-});
-
-app.post('/api/admin/categories', authenticateToken, (req, res) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
-
-  const { name, slug, display_order } = req.body;
-
-  if (!name || !slug) {
-    return res.status(400).json({ error: 'Name and slug are required' });
-  }
-
-  db.run(
-    'INSERT INTO categories (name, slug, display_order) VALUES (?, ?, ?)',
-    [name, slug, display_order || 0],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      res.status(201).json({
-        id: this.lastID,
-        name,
-        slug,
-        display_order: display_order || 0
-      });
-    }
-  );
-});
-
-app.put('/api/admin/categories/:id', authenticateToken, (req, res) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
-
-  const { id } = req.params;
-  const { name, slug, display_order } = req.body;
-
-  db.run(
-    'UPDATE categories SET name = ?, slug = ?, display_order = ? WHERE id = ?',
-    [name, slug, display_order, id],
-    function(err) {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
-
-      res.json({ message: 'Category updated successfully' });
-    }
-  );
-});
-
-app.delete('/api/admin/categories/:id', authenticateToken, (req, res) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
-
-  const { id } = req.params;
-
-  db.run('DELETE FROM categories WHERE id = ?', [id], function(err) {
-    if (err) {
-      return res.status(500).json({ error: 'Database error' });
-    }
-
-    res.json({ message: 'Category deleted successfully' });
-  });
-});
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
-});
-
-// Serve React app
+// Serve React app for all other routes
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+  res.sendFile(path.join(__dirname, 'client/build/index.html'));
 });
 
+// Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 }); 
