@@ -38,7 +38,6 @@ api.interceptors.response.use(
 
 export const authAPI = {
   login: (credentials) => api.post('/login', credentials),
-  register: (userData) => api.post('/register', userData),
 };
 
 export const articlesAPI = {
