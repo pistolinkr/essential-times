@@ -27,30 +27,40 @@ Essential Times is a news posting site where reporters and administrators can wr
 
 ### Backend
 - **Node.js** + **Express.js**
-- **SQLite** database
+- **Firebase** (Authentication, Firestore, Storage)
 - **JWT** authentication
 - **Multer** file upload
-- **bcryptjs** password encryption
 
 ### Frontend
 - **React.js** + **React Router**
 - **Axios** API communication
-- **CSS3** styling
+- **CSS3** styling with dark/light theme support
 - Responsive web design
 
 ## Installation & Setup
 
-### 1. Environment Variables
+### 1. Firebase Setup
+
+First, set up Firebase project:
+1. Create a new project at [Firebase Console](https://console.firebase.google.com/)
+2. Enable Authentication (Email/Password)
+3. Create Firestore Database
+4. Enable Storage
+5. Add web app and copy configuration
+
+### 2. Environment Variables
 
 ```bash
 # Create .env file
 cp env.example .env
 
-# Edit .env file with actual account information
-# REPORTER_ACCOUNT_ID=your-reporter-email
-# REPORTER_ACCOUNT_PASSWORD=your-reporter-password
-# ADMIN_ACCOUNT_ID=your-admin-email
-# ADMIN_ACCOUNT_PASSWORD=your-admin-password
+# Edit .env file with Firebase configuration
+# FIREBASE_API_KEY=your-api-key
+# FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+# FIREBASE_PROJECT_ID=your-project-id
+# FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+# FIREBASE_MESSAGING_SENDER_ID=your-sender-id
+# FIREBASE_APP_ID=your-app-id
 # JWT_SECRET_KEY=your-secret-key
 ```
 
@@ -93,8 +103,11 @@ npm start
 ```
 Essential Times/
 ├── server.js              # Express server main file
+├── firebase-config.js     # Firebase configuration
+├── firebase.json          # Firebase project settings
+├── firestore.rules        # Firestore security rules
+├── storage.rules          # Storage security rules
 ├── package.json           # Backend dependencies
-├── essential_times.db     # SQLite database
 ├── uploads/              # Uploaded images storage
 └── client/               # React frontend
     ├── public/
@@ -102,6 +115,7 @@ Essential Times/
     │   ├── components/   # Reusable components
     │   ├── pages/        # Page components
     │   ├── utils/        # Utility functions
+    │   ├── contexts/     # React contexts (Theme)
     │   ├── App.js        # Main app component
     │   └── index.js      # React entry point
     └── package.json      # Frontend dependencies
@@ -125,32 +139,33 @@ Essential Times/
 
 ### 🔒 Security
 - JWT token-based authentication
-- bcrypt password encryption
+- Firebase Authentication
 - Role-based access control
-- Secure account information management via environment variables
-- Separation of sensitive information via .env file
+- Secure Firebase configuration via environment variables
+- Firestore security rules
 
 ### 📱 Responsive Design
 - Mobile, tablet, desktop support
 - Clean UI similar to Naver News
+- Dark/Light theme support
 
 ### 🖼️ Image Upload
-- Image file upload support
+- Image file upload support via Firebase Storage
 - Automatic filename generation and storage
 
 ### 📊 Database
-- Lightweight database using SQLite
-- Automatic table creation and default user registration
+- Cloud database using Firebase Firestore
+- Real-time data synchronization
 
 ## Usage
 
 ### 1. Login as Reporter
-- Login with reporter account configured in environment variables
+- Login with reporter account (`reporter@esil.com` / `abcd1234`)
 - Click "Reporter Page" button
 - Create new articles or edit/delete existing ones
 
 ### 2. Login as Admin
-- Login with admin account configured in environment variables
+- Login with admin account (`admin@esil.com` / `abcd1234`)
 - Click "Admin Page" button
 - Manage all articles and create new ones
 

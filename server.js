@@ -1,41 +1,41 @@
 const express = require('express');
 const cors = require('cors');
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { auth, db, storage } = require('./firebase-config');
-const { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  signOut 
-} = require('firebase/auth');
-const { 
-  collection, 
-  doc, 
-  getDocs, 
-  getDoc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  where, 
-  orderBy, 
-  limit, 
-  startAfter,
-  serverTimestamp 
-} = require('firebase/firestore');
-const { 
-  ref, 
-  uploadBytes, 
-  getDownloadURL, 
-  deleteObject 
-} = require('firebase/storage');
+// Simple user authentication (no Firebase Auth)
+const users = [
+  {
+    id: 'reporter',
+    email: 'reporter@esil.com',
+    password: 'abcd1234',
+    role: 'reporter',
+    name: '기자'
+  },
+  {
+    id: 'admin',
+    email: 'admin@esil.com', 
+    password: 'abcd1234',
+    role: 'admin',
+    name: '관리자'
+  }
+];
 
-// Load environment variables
-require('dotenv').config();
+// Simple in-memory storage (replace with database later)
+let articles = [];
+let categories = [
+  { id: 'home', name: '홈', slug: 'home', display_order: 0 },
+  { id: 'politics', name: '정치', slug: 'politics', display_order: 1 },
+  { id: 'economy', name: '경제', slug: 'economy', display_order: 2 },
+  { id: 'society', name: '사회', slug: 'society', display_order: 3 },
+  { id: 'technology', name: '기술', slug: 'technology', display_order: 4 },
+  { id: 'entertainment', name: '연예', slug: 'entertainment', display_order: 5 },
+  { id: 'sports', name: '스포츠', slug: 'sports', display_order: 6 }
+];
+
+// Environment variables are loaded in firebase-config.js
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -46,38 +46,17 @@ app.use(express.json());
 app.use(express.static('uploads'));
 app.use(express.static(path.join(__dirname, 'client/build')));
 
-// Initialize default categories in Firebase
-async function initializeCategories() {
-  try {
-    const categoriesRef = collection(db, 'categories');
-    const categoriesSnapshot = await getDocs(categoriesRef);
+// Health check endpoint for Firebase App Hosting
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
 
-    if (categoriesSnapshot.empty) {
-      const defaultCategories = [
-        { name: '홈', slug: 'home', display_order: 0 },
-        { name: '정치', slug: 'politics', display_order: 1 },
-        { name: '경제', slug: 'economy', display_order: 2 },
-        { name: '사회', slug: 'society', display_order: 3 },
-        { name: '기술', slug: 'technology', display_order: 4 },
-        { name: '연예', slug: 'entertainment', display_order: 5 },
-        { name: '스포츠', slug: 'sports', display_order: 6 }
-      ];
-
-      for (const category of defaultCategories) {
-        await addDoc(categoriesRef, {
-          ...category,
-          created_at: serverTimestamp()
-        });
-      }
-      console.log('Default categories initialized');
-    }
-  } catch (error) {
-    console.error('Error initializing categories:', error);
-  }
-}
-
-// Initialize categories on startup
-initializeCategories();
+// Categories are already initialized in memory
+console.log('✅ Categories initialized:', categories.length);
 
 // File upload configuration
 const multerStorage = multer.diskStorage({
@@ -126,32 +105,24 @@ const authenticateToken = (req, res, next) => {
 
 // Routes
 
-// Login with Firebase Auth
+// Simple login without Firebase Auth
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    // Authenticate with Firebase
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
+    // Find user in simple users array
+    const user = users.find(u => u.email === email && u.password === password);
 
-    // Get user profile from Firestore
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('email', '==', email));
-    const querySnapshot = await getDocs(q);
-
-    if (querySnapshot.empty) {
-      return res.status(401).json({ error: 'User profile not found' });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
-
-    const userProfile = querySnapshot.docs[0].data();
 
     // Create JWT token
     const token = jwt.sign(
       { 
-        id: user.uid, 
-        email: userProfile.email, 
-        role: userProfile.role 
+        id: user.id, 
+        email: user.email, 
+        role: user.role 
       },
       process.env.JWT_SECRET_KEY || 'your-secret-key',
       { expiresIn: '24h' }
@@ -160,9 +131,10 @@ app.post('/api/login', async (req, res) => {
     res.json({
       token,
       user: {
-        id: user.uid,
-        email: userProfile.email,
-        role: userProfile.role
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        name: user.name
       }
     });
   } catch (error) {
@@ -174,22 +146,10 @@ app.post('/api/login', async (req, res) => {
 // Get all categories (public)
 app.get('/api/categories', async (req, res) => {
   try {
-    const categoriesRef = collection(db, 'categories');
-    const q = query(categoriesRef, orderBy('display_order', 'asc'));
-    const querySnapshot = await getDocs(q);
-
-    const categories = [];
-    querySnapshot.forEach((doc) => {
-      categories.push({
-        id: doc.id,
-        ...doc.data()
-      });
-    });
-
     res.json(categories);
   } catch (error) {
     console.error('Error fetching categories:', error);
-    res.status(500).json({ error: 'Database error' });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -268,65 +228,12 @@ app.get('/api/categories/:slug/articles', async (req, res) => {
 
 // Get all articles (public)
 app.get('/api/articles', async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
-
   try {
-    const articlesRef = collection(db, 'articles');
-    const articlesQuery = query(
-      articlesRef,
-      where('status', '==', 'published'),
-      orderBy('created_at', 'desc'),
-      limit(limit),
-      startAfter((page - 1) * limit)
-    );
-
-    const articlesSnapshot = await getDocs(articlesQuery);
-    const articles = [];
-
-    for (const doc of articlesSnapshot.docs) {
-      const articleData = doc.data();
-      
-      // Get author info
-      const usersRef = collection(db, 'users');
-      const userQuery = query(usersRef, where('id', '==', articleData.author_id));
-      const userSnapshot = await getDocs(userQuery);
-      const authorName = userSnapshot.empty ? 'Unknown' : userSnapshot.docs[0].data().name;
-
-      // Get category info
-      let categoryName = null;
-      if (articleData.category_id) {
-        const categoriesRef = collection(db, 'categories');
-        const categoryQuery = query(categoriesRef, where('id', '==', articleData.category_id));
-        const categorySnapshot = await getDocs(categoryQuery);
-        categoryName = categorySnapshot.empty ? null : categorySnapshot.docs[0].data().name;
-      }
-
-      articles.push({
-        id: doc.id,
-        ...articleData,
-        author_name: authorName,
-        category_name: categoryName
-      });
-    }
-
-    // Get total count
-    const countQuery = query(articlesRef, where('status', '==', 'published'));
-    const countSnapshot = await getDocs(countQuery);
-    const total = countSnapshot.size;
-
-    res.json({
-      articles,
-      pagination: {
-        current: page,
-        total: Math.ceil(total / limit),
-        hasNext: page * limit < total,
-        hasPrev: page > 1
-      }
-    });
+    const publishedArticles = articles.filter(article => article.status === 'published');
+    res.json(publishedArticles);
   } catch (error) {
     console.error('Error fetching articles:', error);
-    res.status(500).json({ error: 'Database error' });
+    res.status(500).json({ error: 'Server error' });
   }
 });
 

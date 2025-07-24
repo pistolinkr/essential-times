@@ -1,0 +1,47 @@
+# Firebase App Hosting 설정
+# 이 파일은 Firebase App Hosting에서 환경 변수와 배포 설정을 관리합니다
+
+# 환경 변수 설정
+env_variables:
+  NODE_ENV: "production"
+  PORT: "8080"
+
+# 빌드 설정
+build:
+  # Node.js 버전
+  runtime: "nodejs18"
+  
+  # 시작 명령어
+  start_command: "npm start"
+  
+  # 빌드 명령어 (필요한 경우)
+  # build_command: "npm run build"
+  
+  # 정적 파일 디렉토리
+  static_dir: "client/build"
+  
+  # 무시할 파일들
+  ignore:
+    - "node_modules"
+    - ".git"
+    - ".env"
+    - "*.log"
+    - "uploads/*"
+    - "client/node_modules"
+    - "client/src"
+    - "client/public"
+
+# 헬스 체크 설정
+health_check:
+  path: "/api/health"
+  timeout: 30s
+  interval: 10s
+  healthy_threshold: 2
+  unhealthy_threshold: 3
+
+# 리소스 설정
+resources:
+  cpu: 1
+  memory: "512Mi"
+  max_instances: 10
+  min_instances: 0 
