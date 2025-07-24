@@ -1,13 +1,13 @@
 .header {
-  background: white;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: var(--bg-card);
+  box-shadow: var(--shadow);
   position: sticky;
   top: 0;
   z-index: 1000;
 }
 
 .header-top {
-  border-bottom: 1px solid #e9ecef;
+  border-bottom: 1px solid var(--border-color);
   padding: 10px 0;
 }
 
@@ -18,7 +18,7 @@
 }
 
 .logo h1 {
-  color: #03c75a;
+  color: var(--accent-color);
   font-size: 24px;
   font-weight: bold;
   margin: 0;
@@ -41,7 +41,7 @@
 }
 
 .user-name {
-  color: #666;
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
@@ -63,19 +63,19 @@
 .nav-menu li a {
   display: block;
   padding: 15px 20px;
-  color: #333;
+  color: var(--text-primary);
   text-decoration: none;
   font-weight: 500;
   transition: color 0.3s ease;
 }
 
 .nav-menu li a:hover {
-  color: #03c75a;
+  color: var(--accent-color);
 }
 
 .nav-menu li a.active {
-  color: #03c75a;
-  border-bottom: 2px solid #03c75a;
+  color: var(--accent-color);
+  border-bottom: 2px solid var(--accent-color);
 }
 
 @media (max-width: 768px) {

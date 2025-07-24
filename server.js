@@ -5,8 +5,34 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { createClient } = require('@supabase/supabase-js');
 const { v4: uuidv4 } = require('uuid');
+const { auth, db, storage } = require('./firebase-config');
+const { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  signOut 
+} = require('firebase/auth');
+const { 
+  collection, 
+  doc, 
+  getDocs, 
+  getDoc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  where, 
+  orderBy, 
+  limit, 
+  startAfter,
+  serverTimestamp 
+} = require('firebase/firestore');
+const { 
+  ref, 
+  uploadBytes, 
+  getDownloadURL, 
+  deleteObject 
+} = require('firebase/storage');
 
 // Load environment variables
 require('dotenv').config();
@@ -20,19 +46,13 @@ app.use(express.json());
 app.use(express.static('uploads'));
 app.use(express.static(path.join(__dirname, 'client/build')));
 
-// Supabase setup
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-// Initialize default categories in Supabase
+// Initialize default categories in Firebase
 async function initializeCategories() {
   try {
-    const { data: existingCategories } = await supabase
-      .from('categories')
-      .select('*');
+    const categoriesRef = collection(db, 'categories');
+    const categoriesSnapshot = await getDocs(categoriesRef);
 
-    if (!existingCategories || existingCategories.length === 0) {
+    if (categoriesSnapshot.empty) {
       const defaultCategories = [
         { name: '홈', slug: 'home', display_order: 0 },
         { name: '정치', slug: 'politics', display_order: 1 },
@@ -43,15 +63,13 @@ async function initializeCategories() {
         { name: '스포츠', slug: 'sports', display_order: 6 }
       ];
 
-      const { error } = await supabase
-        .from('categories')
-        .insert(defaultCategories);
-
-      if (error) {
-        console.error('Error inserting default categories:', error);
-      } else {
-        console.log('Default categories initialized');
+      for (const category of defaultCategories) {
+        await addDoc(categoriesRef, {
+          ...category,
+          created_at: serverTimestamp()
+        });
       }
+      console.log('Default categories initialized');
     }
   } catch (error) {
     console.error('Error initializing categories:', error);
@@ -62,7 +80,7 @@ async function initializeCategories() {
 initializeCategories();
 
 // File upload configuration
-const storage = multer.diskStorage({
+const multerStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadDir = 'uploads';
     if (!fs.existsSync(uploadDir)) {
@@ -77,7 +95,7 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ 
-  storage: storage,
+  storage: multerStorage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
@@ -108,36 +126,30 @@ const authenticateToken = (req, res, next) => {
 
 // Routes
 
-// Login with Supabase Auth
+// Login with Firebase Auth
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    // Authenticate with Supabase
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
+    // Authenticate with Firebase
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
 
-    if (authError) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
+    // Get user profile from Firestore
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('email', '==', email));
+    const querySnapshot = await getDocs(q);
 
-    // Get user profile from our users table
-    const { data: userProfile, error: profileError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', authData.user.id)
-      .single();
-
-    if (profileError || !userProfile) {
+    if (querySnapshot.empty) {
       return res.status(401).json({ error: 'User profile not found' });
     }
+
+    const userProfile = querySnapshot.docs[0].data();
 
     // Create JWT token
     const token = jwt.sign(
       { 
-        id: userProfile.id, 
+        id: user.uid, 
         email: userProfile.email, 
         role: userProfile.role 
       },
@@ -148,28 +160,31 @@ app.post('/api/login', async (req, res) => {
     res.json({
       token,
       user: {
-        id: userProfile.id,
+        id: user.uid,
         email: userProfile.email,
         role: userProfile.role
       }
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(401).json({ error: 'Invalid credentials' });
   }
 });
 
 // Get all categories (public)
 app.get('/api/categories', async (req, res) => {
   try {
-    const { data: categories, error } = await supabase
-      .from('categories')
-      .select('*')
-      .order('display_order', { ascending: true });
+    const categoriesRef = collection(db, 'categories');
+    const q = query(categoriesRef, orderBy('display_order', 'asc'));
+    const querySnapshot = await getDocs(q);
 
-    if (error) {
-      return res.status(500).json({ error: 'Database error' });
-    }
+    const categories = [];
+    querySnapshot.forEach((doc) => {
+      categories.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
 
     res.json(categories);
   } catch (error) {
@@ -179,89 +194,140 @@ app.get('/api/categories', async (req, res) => {
 });
 
 // Get articles by category (public)
-app.get('/api/categories/:slug/articles', (req, res) => {
+app.get('/api/categories/:slug/articles', async (req, res) => {
   const { slug } = req.params;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
-  const offset = (page - 1) * limit;
 
-  db.all(
-    `SELECT a.*, u.name as author_name, c.name as category_name 
-     FROM articles a 
-     JOIN users u ON a.author_id = u.id 
-     JOIN categories c ON a.category_id = c.id 
-     WHERE c.slug = ? AND a.status = 'published' 
-     ORDER BY a.created_at DESC 
-     LIMIT ? OFFSET ?`,
-    [slug, limit, offset],
-    (err, articles) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
-      }
+  try {
+    // Get category first
+    const categoriesRef = collection(db, 'categories');
+    const categoryQuery = query(categoriesRef, where('slug', '==', slug));
+    const categorySnapshot = await getDocs(categoryQuery);
 
-      db.get(
-        `SELECT COUNT(*) as total 
-         FROM articles a 
-         JOIN categories c ON a.category_id = c.id 
-         WHERE c.slug = ? AND a.status = 'published'`,
-        [slug],
-        (err, count) => {
-          if (err) {
-            return res.status(500).json({ error: 'Database error' });
-          }
-
-          res.json({
-            articles,
-            pagination: {
-              current: page,
-              total: Math.ceil(count.total / limit),
-              hasNext: page * limit < count.total,
-              hasPrev: page > 1
-            }
-          });
-        }
-      );
+    if (categorySnapshot.empty) {
+      return res.status(404).json({ error: 'Category not found' });
     }
-  );
+
+    const category = categorySnapshot.docs[0].data();
+
+    // Get articles for this category
+    const articlesRef = collection(db, 'articles');
+    const articlesQuery = query(
+      articlesRef,
+      where('category_id', '==', categorySnapshot.docs[0].id),
+      where('status', '==', 'published'),
+      orderBy('created_at', 'desc'),
+      limit(limit),
+      startAfter((page - 1) * limit)
+    );
+
+    const articlesSnapshot = await getDocs(articlesQuery);
+    const articles = [];
+
+    for (const doc of articlesSnapshot.docs) {
+      const articleData = doc.data();
+      
+      // Get author info
+      const usersRef = collection(db, 'users');
+      const userQuery = query(usersRef, where('id', '==', articleData.author_id));
+      const userSnapshot = await getDocs(userQuery);
+      const authorName = userSnapshot.empty ? 'Unknown' : userSnapshot.docs[0].data().name;
+
+      articles.push({
+        id: doc.id,
+        ...articleData,
+        author_name: authorName,
+        category_name: category.name
+      });
+    }
+
+    // Get total count
+    const countQuery = query(
+      articlesRef,
+      where('category_id', '==', categorySnapshot.docs[0].id),
+      where('status', '==', 'published')
+    );
+    const countSnapshot = await getDocs(countQuery);
+    const total = countSnapshot.size;
+
+    res.json({
+      articles,
+      pagination: {
+        current: page,
+        total: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching articles by category:', error);
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Get all articles (public)
-app.get('/api/articles', (req, res) => {
+app.get('/api/articles', async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
-  const offset = (page - 1) * limit;
 
-  db.all(
-    `SELECT a.*, u.name as author_name, c.name as category_name 
-     FROM articles a 
-     JOIN users u ON a.author_id = u.id 
-     LEFT JOIN categories c ON a.category_id = c.id 
-     WHERE a.status = 'published' 
-     ORDER BY a.created_at DESC 
-     LIMIT ? OFFSET ?`,
-    [limit, offset],
-    (err, articles) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error' });
+  try {
+    const articlesRef = collection(db, 'articles');
+    const articlesQuery = query(
+      articlesRef,
+      where('status', '==', 'published'),
+      orderBy('created_at', 'desc'),
+      limit(limit),
+      startAfter((page - 1) * limit)
+    );
+
+    const articlesSnapshot = await getDocs(articlesQuery);
+    const articles = [];
+
+    for (const doc of articlesSnapshot.docs) {
+      const articleData = doc.data();
+      
+      // Get author info
+      const usersRef = collection(db, 'users');
+      const userQuery = query(usersRef, where('id', '==', articleData.author_id));
+      const userSnapshot = await getDocs(userQuery);
+      const authorName = userSnapshot.empty ? 'Unknown' : userSnapshot.docs[0].data().name;
+
+      // Get category info
+      let categoryName = null;
+      if (articleData.category_id) {
+        const categoriesRef = collection(db, 'categories');
+        const categoryQuery = query(categoriesRef, where('id', '==', articleData.category_id));
+        const categorySnapshot = await getDocs(categoryQuery);
+        categoryName = categorySnapshot.empty ? null : categorySnapshot.docs[0].data().name;
       }
 
-      db.get('SELECT COUNT(*) as total FROM articles WHERE status = "published"', (err, count) => {
-        if (err) {
-          return res.status(500).json({ error: 'Database error' });
-        }
-
-        res.json({
-          articles,
-          pagination: {
-            current: page,
-            total: Math.ceil(count.total / limit),
-            hasNext: page * limit < count.total,
-            hasPrev: page > 1
-          }
-        });
+      articles.push({
+        id: doc.id,
+        ...articleData,
+        author_name: authorName,
+        category_name: categoryName
       });
     }
-  );
+
+    // Get total count
+    const countQuery = query(articlesRef, where('status', '==', 'published'));
+    const countSnapshot = await getDocs(countQuery);
+    const total = countSnapshot.size;
+
+    res.json({
+      articles,
+      pagination: {
+        current: page,
+        total: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching articles:', error);
+    res.status(500).json({ error: 'Database error' });
+  }
 });
 
 // Get single article (public)

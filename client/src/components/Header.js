@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { categoriesAPI } from '../utils/api';
+import ThemeToggle from './ThemeToggle';
 import './Header.css';
 
 const Header = ({ user, onLogout }) => {
@@ -39,6 +40,7 @@ const Header = ({ user, onLogout }) => {
               </Link>
             </div>
             <div className="header-right">
+              <ThemeToggle />
               {user ? (
                 <div className="user-menu">
                   <span className="user-name">

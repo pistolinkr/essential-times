@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { ThemeProvider } from './contexts/ThemeContext';
 import Header from './components/Header';
 import Home from './pages/Home';
 import Login from './pages/Login';
@@ -53,36 +54,38 @@ function App() {
   }
 
   return (
-    <Router>
-      <div className="App">
-        <Header user={user} onLogout={handleLogout} />
-        <main>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/login" element={<Login onLogin={handleLogin} />} />
-            <Route 
-              path="/reporter" 
-              element={
-                <ProtectedRoute allowedRoles={['reporter']}>
-                  <Reporter user={user} />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/admin" 
-              element={
-                <ProtectedRoute allowedRoles={['admin']}>
-                  <Admin user={user} />
-                </ProtectedRoute>
-              } 
-            />
-            <Route path="/article/:id" element={<ArticleDetail />} />
-            <Route path="/category/:slug" element={<CategoryPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </main>
-      </div>
-    </Router>
+    <ThemeProvider>
+      <Router>
+        <div className="App">
+          <Header user={user} onLogout={handleLogout} />
+          <main>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/login" element={<Login onLogin={handleLogin} />} />
+              <Route 
+                path="/reporter" 
+                element={
+                  <ProtectedRoute allowedRoles={['reporter']}>
+                    <Reporter user={user} />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin" 
+                element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <Admin user={user} />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route path="/article/:id" element={<ArticleDetail />} />
+              <Route path="/category/:slug" element={<CategoryPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </main>
+        </div>
+      </Router>
+    </ThemeProvider>
   );
 }
 

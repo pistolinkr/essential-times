@@ -1,15 +1,16 @@
 .article-card {
-  background: white;
+  background: var(--bg-card);
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow);
   margin-bottom: 20px;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   overflow: hidden;
+  border: 1px solid var(--border-color);
 }
 
 .article-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-hover);
 }
 
 .article-content {
@@ -29,7 +30,7 @@
 }
 
 .article-title a {
-  color: #333;
+  color: var(--text-primary);
   text-decoration: none;
   font-size: 18px;
   font-weight: 600;
@@ -37,11 +38,11 @@
 }
 
 .article-title a:hover {
-  color: #03c75a;
+  color: var(--accent-color);
 }
 
 .article-excerpt {
-  color: #666;
+  color: var(--text-secondary);
   font-size: 14px;
   line-height: 1.6;
   margin-bottom: 15px;
@@ -55,7 +56,7 @@
   display: flex;
   gap: 15px;
   font-size: 12px;
-  color: #999;
+  color: var(--text-muted);
 }
 
 .article-author {
@@ -63,7 +64,7 @@
 }
 
 .article-category {
-  color: #03c75a;
+  color: var(--accent-color);
   font-weight: 500;
 }
 
